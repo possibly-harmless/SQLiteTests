@@ -1,41 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sqlite3.h>
+#include <string.h>
+#include "parson.h"
+#include "db_sql.h"
 
 #define DB_PATH "test.db"
 #define SUCCESS 0
 #define FAILURE 1
 
 
-char* CREATE_TABLE_SQL = 
-          "DROP TABLE IF EXISTS COMPANY;"
-          "CREATE TABLE COMPANY("
-          "ID INT PRIMARY KEY NOT NULL,"
-          "NAME TEXT NOT NULL,"
-          "AGE INT NOT NULL,"
-          "ADDRESS CHAR(50),"
-          "SALARY REAL );";
-
-char * INSERT_DATA_SQL = 
-          "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "
-          "VALUES (1, 'Paul', 32, 'California', 20000.00 ); "
-
-          "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "
-          "VALUES (2, 'Allen', 25, 'Texas', 15000.00 );      "
-
-          "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "
-          "VALUES (3, 'Teddy', 23, 'Norway', 20000.00 );     "
-
-          "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "
-          "VALUES (4, 'Mark', 25, 'Rich-Mond ', 65000.00 ); ";
-
-char * SELECT_DATA_SQL = "SELECT * from COMPANY";
-
-
 static int callback(void *data, int argc, char **argv, char **azColName);
+
+static int create_and_test_db(sqlite3 *conn);
+
+
 
 int db_connect_verbose(char* db_path, sqlite3 ** connection_ptr);
 int db_sql_execute_verbose(sqlite3 *conn, const char* sql, const char* success_msg);
+
+
 
 
 int main(int argc, char *argv[])
@@ -54,25 +38,11 @@ int main(int argc, char *argv[])
       exit(EXIT_FAILURE);  
     }
 
-    /* Execute SQL statement */
+    if(create_and_test_db(db) != SUCCESS){
+      exit(EXIT_FAILURE);  
+    }
+    
 
-    if(db_sql_execute_verbose(
-        db, CREATE_TABLE_SQL, "Table created successfully"
-      ) != SQLITE_OK){
-      exit(EXIT_FAILURE);
-    }
-  
-    if(db_sql_execute_verbose(
-        db, INSERT_DATA_SQL, "Records inserted successfully") != SQLITE_OK
-      ){
-      exit(EXIT_FAILURE);
-    }
-
-    if(db_sql_execute_verbose(
-        db, SELECT_DATA_SQL, "Operation done successfully\n") != SQLITE_OK
-      ){
-      exit(EXIT_FAILURE);
-    }
 
     sqlite3_close(db);
     return 0;
@@ -118,4 +88,26 @@ int db_sql_execute_verbose(sqlite3 *conn, const char* sql, const char* success_m
       fprintf(stdout, "%s\n", success_msg);
   }
   return result;
+}
+
+
+static int create_and_test_db(sqlite3 *conn){
+  if(db_sql_execute_verbose(
+        conn, CREATE_TABLE_SQL, "Table created successfully"
+      ) != SQLITE_OK){
+      return FAILURE;
+    }
+  
+    if(db_sql_execute_verbose(
+        conn, INSERT_DATA_SQL, "Records inserted successfully") != SQLITE_OK
+      ){
+      return FAILURE;
+    }
+
+    if(db_sql_execute_verbose(
+        conn, SELECT_DATA_SQL, "Operation done successfully\n") != SQLITE_OK
+      ){
+      return FAILURE;
+    }
+    return SUCCESS;
 }
