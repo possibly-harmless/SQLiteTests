@@ -4,32 +4,31 @@
 #include <string.h>
 #include "parson.h"
 #include "db_sql.h"
+#include "common.h"
+#include "serialization.h"
+#include "serialization_test.h"
 
 #define DB_PATH "test.db"
-#define SUCCESS 0
-#define FAILURE 1
 
 
-static int callback(void *data, int argc, char **argv, char **azColName);
+#define RECREATE_AND_TEST_DB TRUE
 
-static int create_and_test_db(sqlite3 *conn);
-
-
-
-int db_connect_verbose(char* db_path, sqlite3 ** connection_ptr);
-int db_sql_execute_verbose(sqlite3 *conn, const char* sql, const char* success_msg);
+char * serialized_string = NULL;
+char * sqliteErrMsg = NULL;
+sqlite3 *connection;
+const char* sql = NULL;
 
 
+JSON_Status execute_sql(
+  void * exec_data, int cb(void * , int , char **, char **)
+); 
 
 
 int main(int argc, char *argv[])
-
 {
-
     sqlite3 *db;
     char *zErrMsg = 0;
     int rc;
-    char *sql;
     const char *data = "Callback function called";
 
     /* Open database */
@@ -38,76 +37,50 @@ int main(int argc, char *argv[])
       exit(EXIT_FAILURE);  
     }
 
-    if(create_and_test_db(db) != SUCCESS){
+    if(RECREATE_AND_TEST_DB && create_and_test_db(db) != SUCCESS){
       exit(EXIT_FAILURE);  
     }
-    
 
+    printf("\n\n\n ====== Testing SQL execution and serialization of result to JSON...======\n\n\n");
+    
+    connection = db;
+    sql = str_dup("SELECT ID, NAME FROM COMPANY");
+  
+    if(serialize_to_json(execute_sql, &serialized_string) == JSONSuccess){
+      if(serialized_string){
+        puts(serialized_string);
+        free(serialized_string);  
+      }
+    } else {
+      puts("JSON serialization failed");
+    }
+
+    free((void *)sql);
+    sql = NULL;
 
     sqlite3_close(db);
+
+    // test_serialization();
+
     return 0;
 }
 
-static int callback(void *data, int argc, char **argv, char **azColName)
+
+JSON_Status execute_sql(
+  void * exec_data, int cb(void * , int , char **, char **)
+) 
 {
-  int i;
-  fprintf(stderr, "%s: \n", (const char *)data);
-  for (i = 0; i < argc; i++)
-  {
-      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-  }
-  printf("\n");
-  return 0;
-}
-
-int db_connect_verbose(char* db_path, sqlite3 ** connection_ptr){
-  int result;
-  result = sqlite3_open(db_path, connection_ptr);
-  if (result){
-    fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(*connection_ptr)); 
-  } else{
-    fprintf(stderr, "Opened database successfully\n");
-  }
-  return result;
-}
-
-int db_sql_execute_verbose(sqlite3 *conn, const char* sql, const char* success_msg){
-  int result;
-  char *zErrMsg = 0;
-  const char *data = "Callback function called";
-
-  if(!success_msg){
-    success_msg = "Operation was successful";
-  }
-
-  result = sqlite3_exec(conn, sql, callback, (void *) data, &zErrMsg);
+  char *zErrMsg = NULL; 
+  int result = sqlite3_exec(connection, sql, cb, exec_data, &zErrMsg);
   if (result != SQLITE_OK){
       fprintf(stderr, "SQL error: %s\n", zErrMsg);
+      sqliteErrMsg = str_dup(zErrMsg);
       sqlite3_free(zErrMsg);
   } else {
-      fprintf(stdout, "%s\n", success_msg);
+      if(sqliteErrMsg){
+        free(sqliteErrMsg);
+        sqliteErrMsg = NULL;
+      }
   }
-  return result;
-}
-
-
-static int create_and_test_db(sqlite3 *conn){
-  if(db_sql_execute_verbose(
-        conn, CREATE_TABLE_SQL, "Table created successfully"
-      ) != SQLITE_OK){
-      return FAILURE;
-    }
-  
-    if(db_sql_execute_verbose(
-        conn, INSERT_DATA_SQL, "Records inserted successfully") != SQLITE_OK
-      ){
-      return FAILURE;
-    }
-
-    if(db_sql_execute_verbose(
-        conn, SELECT_DATA_SQL, "Operation done successfully\n") != SQLITE_OK
-      ){
-      return FAILURE;
-    }
-    return SUCCESS;
+  return result == SUCCESS? JSONSuccess : JSONFailure;
 }
